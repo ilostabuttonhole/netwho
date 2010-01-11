@@ -114,6 +114,8 @@ class GzipDecoder(object):
       pass
     except IOError:
       pass
+    except:
+      print '- Unusual error when decompressing stream (ignoring)'
     return extracted
 
   def _smart_decompress(self, data, length=None):
