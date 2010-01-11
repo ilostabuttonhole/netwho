@@ -6,9 +6,11 @@
 import sys
 import optparse
 from scapy.all import sniff, IP, IPv6, TCP, UDP, load_module
+from lib import storage
 from preprocessors import http_gzip
 from parsers import http_incoming
 from parsers import dhcpv6_outgoing, irc_outgoing, http_outgoing, yahoo_outgoing, upnp_outgoing, zeroconf_outgoing
+
 
 load_module("p0f")
 
@@ -44,6 +46,7 @@ class IdentitySniffer(object):
       zeroconf_outgoing.ZeroconfOutgoingParser()
     ]
 
+    self.storage = storage.SqliteStorage('/tmp/netwho.db')
     if not self.filter:
       filters = set()
       for parser in self.parsers:
@@ -58,12 +61,8 @@ class IdentitySniffer(object):
     payload = None
     handled_by_preproc = None
 
-    if pkt.haslayer(IP):
-      ip_type = IP
-    elif pkt.haslayer(IPv6):
-      ip_type = IPv6
-    else:
-      return None
+    if not pkt.haslayer(IP) or not pkt.haslayer(IPv6):
+      return
 
     for preproc in self.preprocessors:
       if pkt.haslayer(preproc.LAYER):
@@ -99,16 +98,37 @@ class IdentitySniffer(object):
               local_host = 'src'
 
             if result:
-              results.append((pkt['Ethernet'].fields[local_host],
-                             pkt.getlayer(ip_type).fields[local_host],
-                             parser.PROTOCOL, result))
+              results.append(parser, result)
 
-    for result in results:
-      # This will not scale!
-      if result not in self.seen:
-        print result
-        self.seen.append(result)
+    if result:
+      hid = self.save_host(pkt, local_host)
+      iid = self.save_identity(hid, parser, result)
 
+    if self.keywords:
+      self.check_keywords(results, pkt, payload)
+
+  def save_identity(self, hid, parser, result):
+    pass
+
+  def save_host(self, pkt, local_host):
+    if pkt.haslayer(IP):
+      ip_type = IP
+    elif pkt.haslayer(IPv6):
+      ip_type = IPv6
+
+    mac_addr = pkt['Ethernet'].fields[local_host]
+    ip = pkt.getlayer(ip_type).fields[local_host]
+    if ip_type == IPv6:
+      ipv6_addr = ip
+      ipv4_addr = None
+    else:
+      ipv4_addr = ip
+      ipv6_addr = None
+
+      hid = self.storage.save_host(mac_addr, ipv4_addr, ipv6_addr,
+                                   datetime.datetime.fromtimestamp(payload.time))
+
+  def check_keywords(self, results, pkt, payload):
     if payload and self.keywords:
       for keyword in self.keywords:
         if keyword in payload:
@@ -124,6 +144,7 @@ class IdentitySniffer(object):
             print pkt.summary()
             print results
             print '-' * 72
+
 
   def process_input(self):
     """Call this when you are ready for IdentitySniffer to do something."""
