@@ -9,7 +9,6 @@ class DhcpV6OutgoingParser(BaseParser):
 
   DOMAIN_RE = re.compile('\x00\x0d([\w-]+)\x00')
   def parse(self, pkt, payload):
-    pkt.show()
     match = self.DOMAIN_RE.search(payload)
     if match:
       yield Identity(service='Machine', event='broadcast',

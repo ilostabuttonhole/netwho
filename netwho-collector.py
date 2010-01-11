@@ -13,7 +13,8 @@ from parsers import dhcpv6_outgoing, irc_outgoing, http_outgoing, yahoo_outgoing
 load_module("p0f")
 
 class IdentitySniffer(object):
-  def __init__(self, interface=None, pcap_filename=None, filter=None):
+  def __init__(self, interface=None, pcap_filename=None, filter=None,
+               keywords=None):
     """Create a IdentitySniffer
     
     Args:
@@ -24,6 +25,11 @@ class IdentitySniffer(object):
     self.interface = interface
     self.filter = filter
     self.pcap_filename = pcap_filename
+    if keywords:
+      self.keywords = keywords
+    else:
+      self.keywords = []
+
     self.preprocessors = [
       http_gzip.GzipDecoder()
     ]
@@ -103,6 +109,22 @@ class IdentitySniffer(object):
         print result
         self.seen.append(result)
 
+    if payload and self.keywords:
+      for keyword in self.keywords:
+        if keyword in payload:
+          caught = False
+          for result in results:
+            if keyword in result[-1].value:
+              caught = True
+              break
+
+          if not caught:
+            print '*' * 72
+            print "- Found %s in: %s" % (keyword, payload)
+            print pkt.summary()
+            print results
+            print '-' * 72
+
   def process_input(self):
     """Call this when you are ready for IdentitySniffer to do something."""
     print "filter: %s" % self.filter
@@ -120,10 +142,19 @@ if __name__ == '__main__':
                     type='str', help='Path to pcap file to parse')
   parser.add_option('-i', '--interface', dest='interface', default=None,
                     type='str', help='Ethernet interface to use')
+  parser.add_option('-k', '--keywords', dest='keywords', default=None,
+                    type='str', help='Keywords to notify on if unmatched packet appears.')
+
   (options, args) = parser.parse_args()
   if args:
     filter = args[0]
   else:
     filter = None
-  ids = IdentitySniffer(pcap_filename=options.pcap_filename, interface=options.interface, filter=filter)
+
+  if options.keywords:
+    keywords = options.keywords.split(',')
+  else:
+    keywords = None
+  ids = IdentitySniffer(pcap_filename=options.pcap_filename, interface=options.interface, filter=filter,
+                        keywords=keywords)
   ids.process_input()
