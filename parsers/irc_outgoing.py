@@ -15,13 +15,15 @@ class IrcOutgoingParser(BaseParser):
   TOPIC_RE = re.compile(':([\w\.]+) 332 (\w+) (\#\w+) :')
 
   def parse(self, pkt, payload):
-
     if not payload:
+      print 'none'
       yield None
     else:
       match = self.CONNECT_RE.search(payload)
       if match:
+        print match
         (nick, username, server, full_name) = match.groups()
+        print match.groups()
         yield Identity(service=server, event='connect', type='handle',
                        value=nick, certainty=0.7)
         yield Identity(service=server, event='connect', type='name',

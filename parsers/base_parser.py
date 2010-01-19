@@ -16,11 +16,13 @@ class BaseParser(object):
     return ValueError('undefined.')
 
 class Identity(object):
-  def __init__(self, service=None, event=None, type=None, value=None, certainty=None):
+  def __init__(self, service=None, event=None, type=None, value=None, certainty=None,
+               timestamp=None):
     self.service = service
     self.type = type
     self.event = event
     self.value = value
+    self.timestamp = timestamp
     if certainty:
       self.certainty = certainty
     else:

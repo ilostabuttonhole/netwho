@@ -3,6 +3,7 @@
 # Create a list of "who" each user is on a given network by sniffing their
 # internet traffic. 
 
+import datetime
 import sys
 import optparse
 from scapy.all import sniff, IP, IPv6, TCP, UDP, load_module
@@ -11,6 +12,7 @@ from preprocessors import http_gzip
 from parsers import http_incoming
 from parsers import dhcpv6_outgoing, irc_outgoing, http_outgoing, yahoo_outgoing, upnp_outgoing, zeroconf_outgoing
 
+STORAGE_PATH = '/tmp/netwho.db'
 
 load_module("p0f")
 
@@ -46,7 +48,7 @@ class IdentitySniffer(object):
       zeroconf_outgoing.ZeroconfOutgoingParser()
     ]
 
-    self.storage = storage.SqliteStorage('/tmp/netwho.db')
+    self.storage = storage.SqliteStorage(STORAGE_PATH)
     if not self.filter:
       filters = set()
       for parser in self.parsers:
@@ -58,13 +60,18 @@ class IdentitySniffer(object):
       self.seen = []
 
   def process_packet(self, pkt):
+    print pkt.summary()
     payload = None
     handled_by_preproc = None
+    
+    print pkt.firstlayer
 
-    if not pkt.haslayer(IP) or not pkt.haslayer(IPv6):
+    if not (pkt.haslayer(IP) or pkt.haslayer(IPv6)):
+      print 'returning pkt, no IP stack'
       return
 
     for preproc in self.preprocessors:
+      print 'checking: %s' % preproc
       if pkt.haslayer(preproc.LAYER):
         if ((not preproc.DPORTS or (pkt[preproc.LAYER].dport in preproc.DPORTS)) and
             (not preproc.SPORTS or (pkt[preproc.LAYER].sport in preproc.SPORTS))):
@@ -75,13 +82,14 @@ class IdentitySniffer(object):
 
     # If something has it handled but is not ready yet, short-circuit.
     if handled_by_preproc and not payload:
+      print 'returning pkt, preproc not completed.'
       return None
-
 
     results = []
     local_host = None
 
     for parser in self.parsers:
+      print 'checking: %s' % parser
       if pkt.haslayer(parser.LAYER):
         if ((not parser.DPORTS or (pkt[parser.LAYER].dport in parser.DPORTS)) and
             (not parser.SPORTS or (pkt[parser.LAYER].sport in parser.SPORTS))):
@@ -91,6 +99,7 @@ class IdentitySniffer(object):
           if not payload and parser.PAYLOAD_REQUIRED:
             return None
 
+          print 'sending %s to %s' % (pkt, parser)
           for result in parser.parse(pkt, payload):
             if parser.SPORTS:
               local_host = 'dst'
@@ -98,17 +107,22 @@ class IdentitySniffer(object):
               local_host = 'src'
 
             if result:
-              results.append(parser, result)
+              results.append((parser, result))
 
-    if result:
+    if results:
       hid = self.save_host(pkt, local_host)
-      iid = self.save_identity(hid, parser, result)
+      print hid
+      print '%s: %s' % (hid, results)
+
+      for result in results:
+        iid = self.save_identity(hid, result)
 
     if self.keywords:
       self.check_keywords(results, pkt, payload)
 
-  def save_identity(self, hid, parser, result):
-    pass
+  def save_identity(self, hid, result):
+    (parser, identity) = result
+    return self.storage.save_identity(hid, identity)
 
   def save_host(self, pkt, local_host):
     if pkt.haslayer(IP):
@@ -117,6 +131,7 @@ class IdentitySniffer(object):
       ip_type = IPv6
 
     mac_addr = pkt['Ethernet'].fields[local_host]
+    payload = pkt.payload
     ip = pkt.getlayer(ip_type).fields[local_host]
     if ip_type == IPv6:
       ipv6_addr = ip
@@ -125,8 +140,9 @@ class IdentitySniffer(object):
       ipv4_addr = ip
       ipv6_addr = None
 
-      hid = self.storage.save_host(mac_addr, ipv4_addr, ipv6_addr,
+    hid = self.storage.update_host(mac_addr, ipv4_addr, ipv6_addr,
                                    datetime.datetime.fromtimestamp(payload.time))
+    return hid
 
   def check_keywords(self, results, pkt, payload):
     if payload and self.keywords:
