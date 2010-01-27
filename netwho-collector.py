@@ -60,18 +60,16 @@ class IdentitySniffer(object):
       self.seen = []
 
   def process_packet(self, pkt):
-    print pkt.summary()
+#    print pkt.summary()
     payload = None
     handled_by_preproc = None
     
-    print pkt.firstlayer
-
     if not (pkt.haslayer(IP) or pkt.haslayer(IPv6)):
-      print 'returning pkt, no IP stack'
+#      print 'returning pkt, no IP stack'
       return
 
     for preproc in self.preprocessors:
-      print 'checking: %s' % preproc
+#      print 'checking: %s' % preproc
       if pkt.haslayer(preproc.LAYER):
         if ((not preproc.DPORTS or (pkt[preproc.LAYER].dport in preproc.DPORTS)) and
             (not preproc.SPORTS or (pkt[preproc.LAYER].sport in preproc.SPORTS))):
@@ -82,14 +80,14 @@ class IdentitySniffer(object):
 
     # If something has it handled but is not ready yet, short-circuit.
     if handled_by_preproc and not payload:
-      print 'returning pkt, preproc not completed.'
+#      print 'returning pkt, preproc not completed.'
       return None
 
     results = []
     local_host = None
 
     for parser in self.parsers:
-      print 'checking: %s' % parser
+#      print 'checking: %s' % parser
       if pkt.haslayer(parser.LAYER):
         if ((not parser.DPORTS or (pkt[parser.LAYER].dport in parser.DPORTS)) and
             (not parser.SPORTS or (pkt[parser.LAYER].sport in parser.SPORTS))):
@@ -99,7 +97,7 @@ class IdentitySniffer(object):
           if not payload and parser.PAYLOAD_REQUIRED:
             return None
 
-          print 'sending %s to %s' % (pkt, parser)
+#          print 'sending %s to %s' % (pkt, parser)
           for result in parser.parse(pkt, payload):
             if parser.SPORTS:
               local_host = 'dst'
@@ -111,8 +109,6 @@ class IdentitySniffer(object):
 
     if results:
       hid = self.save_host(pkt, local_host)
-      print hid
-      print '%s: %s' % (hid, results)
 
       for result in results:
         iid = self.save_identity(hid, result)
@@ -147,7 +143,7 @@ class IdentitySniffer(object):
   def check_keywords(self, results, pkt, payload):
     if payload and self.keywords:
       for keyword in self.keywords:
-        if keyword in payload:
+        if keyword.lower() in payload.lower():
           caught = False
           for result in results:
             if keyword in result[-1].value:

@@ -9,6 +9,7 @@ class SqliteStorage(object):
       create_tables = False
       
     self.conn = sqlite3.connect(filename)
+    self.conn.row_factory = sqlite3.Row      
     self.cursor = self.conn.cursor()
     if create_tables:
       self.create_tables()
@@ -45,17 +46,23 @@ class SqliteStorage(object):
     self.conn.commit()
     
   def save(self, statement, args=None):
-    print (statement, args)
-    self.cursor.execute(statement, args)
+    self.query(statement, args)
     self.conn.commit()
+  
+  def query(self, statement, args=None):
+    if args:
+      self.cursor.execute(statement, args)
+    else:
+      self.cursor.execute(statement)
+      
+
   
   # TODO(tstromberg): Add memoize here
   def _get_hostid_for_mac(self, mac_addr):
-    print 'looking up: %s' % mac_addr
-    self.save('SELECT id FROM hosts WHERE mac_addr=?', [mac_addr])
+    self.cursor.execute('SELECT id FROM hosts WHERE mac_addr=?', [mac_addr])
     for row in self.cursor:
-      print 'mac %s is id %s' % (mac_addr, row[0])
-      return row[0]
+#      print 'mac %s is id %s' % (mac_addr, row['id'])
+      return row['id']
 
   def update_host(self, mac_addr, ipv4_addr, ipv6_addr, ts):
     hid = self._get_hostid_for_mac(mac_addr)
@@ -73,8 +80,25 @@ class SqliteStorage(object):
     for row in self.cursor:
       return row[0]
 
+  def get_current_identities(self):
+    self.query("""
+      SELECT * FROM (
+        SELECT mac_addr, ipv6_addr, ipv4_addr, service, type, value
+        FROM identities
+        JOIN hosts ON identities.host_id = hosts.id
+        ORDER BY mac_addr, identities.certainty DESC, identities.last_seen DESC
+      )
+      AS subselect GROUP BY 1, 2, 3, 4;
+    """)
+    return self.cursor.fetchall()
+
   def save_identity(self, hid, identity):
-    self.save('INSERT INTO identities(host_id,service,event,type,value,certainty,'
-                        'first_seen,last_seen) VALUES (?,?,?,?,?,?,?,?)',
-                        (hid, identity.service, identity.event, identity.type, identity.value,
-                         identity.certainty, identity.timestamp, identity.timestamp))
+    try:
+      self.save('INSERT INTO identities(host_id,service,event,type,value,certainty,'
+                'first_seen,last_seen) VALUES (?,?,?,?,?,?,?,?)',
+                (hid, identity.service, identity.event, identity.type, identity.value,
+                 identity.certainty, identity.timestamp, identity.timestamp))
+    except sqlite3.IntegrityError:
+      pass
+#      print "%s already in db" % identity
+
