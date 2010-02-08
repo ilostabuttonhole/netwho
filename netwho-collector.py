@@ -4,6 +4,7 @@
 # internet traffic. 
 
 import datetime
+import Queue
 import sys
 import optparse
 from scapy.all import sniff, IP, IPv6, TCP, UDP, load_module
@@ -12,7 +13,9 @@ from preprocessors import http_gzip
 from parsers import http_incoming
 from parsers import dhcpv6_outgoing, irc_outgoing, http_outgoing, yahoo_outgoing, upnp_outgoing, zeroconf_outgoing
 
+IP_CACHE = {}
 STORAGE_PATH = '/tmp/netwho.db'
+SAVE_QUEUE = Queue.Queue
 
 load_module("p0f")
 
@@ -60,7 +63,6 @@ class IdentitySniffer(object):
       self.seen = []
 
   def process_packet(self, pkt):
-#    print pkt.summary()
     payload = None
     handled_by_preproc = None
     
@@ -107,14 +109,14 @@ class IdentitySniffer(object):
             if result:
               results.append((parser, result))
 
-    if results:
-      hid = self.save_host(pkt, local_host)
-
-      for result in results:
-        iid = self.save_identity(hid, result)
+    hid = self.save_host(pkt, local_host)
+    for result in results:
+      iid = self.save_identity(hid, result)
 
     if self.keywords:
       self.check_keywords(results, pkt, payload)
+      
+    
 
   def save_identity(self, hid, result):
     (parser, identity) = result
@@ -137,7 +139,7 @@ class IdentitySniffer(object):
       ipv6_addr = None
 
     hid = self.storage.update_host(mac_addr, ipv4_addr, ipv6_addr,
-                                   datetime.datetime.fromtimestamp(payload.time))
+                                   datetime.datetime.fromtimestamp(pkt.time))
     return hid
 
   def check_keywords(self, results, pkt, payload):
