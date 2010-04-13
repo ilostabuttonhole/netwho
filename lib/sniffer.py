@@ -59,8 +59,9 @@ class Sniffer(object):
       self.seen = []
     
   def process_packet(self, pkt):
-    (host, results) = self.processor.process_packet(pkt)
-    if results:
+    proc_out = self.processor.process_packet(pkt)
+    if proc_out and proc_out[0]:
+      (host, results) = proc_out
       print (host, results)
     
     if self.keywords:
