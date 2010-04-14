@@ -39,6 +39,7 @@ class HttpIncomingParser(BaseParser):
   GMAIL_CFS_RE = re.compile('\["cfs",\[\["(.*?)","(.*?\@.*?)",1,""\]')
   GOOGLE_GUSER_RE = re.compile("div id=guser width=100%\>\<nobr\>\<b\>(.*?\@.*?)\<\/b\>")
   FACEBOOK_PROFILE_STATUS_RE = re.compile('profile_name_and_status.*?\<h1 id=.*?profile_name.*?>(.*?)\<.*?h1')
+  LINKEDIN_WELCOME = re.compile('a href=\"\/myprofile\?trk=hb_pro\" title=\"Edit profile\"\>(.*?)\<\/a')
 
   def parse(self, pkt, payload):
     match = self.GOOGLE_USERMAIL_RE.search(payload)
@@ -120,3 +121,8 @@ class HttpIncomingParser(BaseParser):
     if match:
       yield Identity(service='GMail', event='Access', type='name',
                      value=match.group(1), certainty=0.9)
+    
+    match = self.LINKEDIN_WELCOME.search(payload)
+    if match:
+      yield Identity(service='LinkedIn', event='Access Main', type='name',
+                     value=match.group(1), certainty=1)
