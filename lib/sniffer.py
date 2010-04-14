@@ -17,7 +17,8 @@
 __author__ = 'thomas%stromberg.org (Thomas Stromberg)'
 
 
-from scapy.all import sniff, IP, IPv6, TCP, UDP, load_module
+from scapy.all import *
+#sniff, IP, IPv6, TCP, UDP, load_module
 import datetime
 
 # local
@@ -42,6 +43,8 @@ class Sniffer(object):
     self.filter = filter
     self.pcap_filename = pcap_filename
     self.processor = processor.Processor()
+    self.seen_cache = []
+    
     if keywords:
       self.keywords = keywords
     else:
@@ -60,12 +63,16 @@ class Sniffer(object):
     
   def process_packet(self, pkt):
     proc_out = self.processor.process_packet(pkt)
+    results = []
     if proc_out and proc_out[0]:
       (host, results) = proc_out
-      print (host, results)
-    
+      # TODO(helixblue): This code should not be here.
+      if proc_out not in self.seen_cache:
+        print (host, results)
+        self.seen_cache.append(proc_out)
+
     if self.keywords:
-      self.check_keywords(results, pkt, payload)
+      self.check_keywords(results, pkt, pkt.payload)    
 
   def save_identity(self, hid, result):
     (parser, identity) = result
@@ -94,7 +101,7 @@ class Sniffer(object):
   def check_keywords(self, results, pkt, payload):
     if payload and self.keywords:
       for keyword in self.keywords:
-        if keyword.lower() in payload.lower():
+        if keyword.lower() in str(payload).lower():
           caught = False
           for result in results:
             if keyword in result[-1].value:
